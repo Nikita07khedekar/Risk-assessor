@@ -1,0 +1,32 @@
+﻿@{
+    ViewData["Title"] = "Assistant Chat";
+}
+
+<h2>Ask OpenAI Assistant</h2>
+
+<div>
+    <input type="text" id="userInput" placeholder="Ask something..." style="width:300px;" />
+    <button onclick="askAssistant()">Ask</button>
+</div>
+
+<div id="response" style="margin-top:20px; font-weight:bold;"></div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    function askAssistant() {
+        var question = $("#userInput").val();
+
+        $.ajax({
+            url: "/api/assistant/ask",
+            type: "POST",
+            data: JSON.stringify(question),
+            contentType: "application/json",
+            success: function (data) {
+                $("#response").text("Assistant says: " + data);
+            },
+            error: function (xhr) {
+                $("#response").text("Error: " + xhr.statusText);
+            }
+        });
+    }
+</script>
