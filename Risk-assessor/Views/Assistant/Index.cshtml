@@ -9,12 +9,23 @@
     <button onclick="askAssistant()">Ask</button>
 </div>
 
+<div id="chart-container" style="width: 600px; height: 400px; margin-top: 30px; display:none;">
+    <canvas id="riskChart"></canvas>
+</div>
+<div id="customer-list" style="margin-top:20px; display:none;"></div>
 <div id="response" style="margin-top:20px; font-weight:bold;"></div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    let riskData = null;
+    let riskCustomers = null;
+
     function askAssistant() {
         var question = $("#userInput").val();
+        $("#response").text("");
+        $("#customer-list").hide();
+        $("#chart-container").hide();
 
         $.ajax({
             url: "/api/assistant/ask",
@@ -22,11 +33,83 @@
             data: JSON.stringify(question),
             contentType: "application/json",
             success: function (data) {
-                $("#response").text("Assistant says: " + data);
+                // Try to extract JSON from the response
+                let jsonStart = data.indexOf('{');
+                let jsonEnd = data.lastIndexOf('}');
+                let jsonString = data.substring(jsonStart, jsonEnd + 1);
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(jsonString);
+                } catch (e) {
+                    $("#response").text("Could not parse assistant response as JSON.");
+                    return;
+                }
+                riskCustomers = parsed.risk_customers;
+                riskData = [
+                    { label: 'High Risk', count: parsed.risk_customers.high_risk.length, key: 'high_risk' },
+                    { label: 'Moderate Risk', count: parsed.risk_customers.moderate_risk.length, key: 'moderate_risk' },
+                    { label: 'Low Risk', count: parsed.risk_customers.low_risk.length, key: 'low_risk' },
+                    { label: 'No Defaulters', count: parsed.risk_customers.no_defaulters.length, key: 'no_defaulters' }
+                ];
+                renderChart();
+                $("#chart-container").show();
             },
             error: function (xhr) {
                 $("#response").text("Error: " + xhr.statusText);
             }
         });
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById('riskChart').getContext('2d');
+        if (window.riskChartInstance) {
+            window.riskChartInstance.destroy();
+        }
+        window.riskChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: riskData.map(x => x.label),
+                datasets: [{
+                    label: 'Customer Count',
+                    data: riskData.map(x => x.count),
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(255, 206, 86, 0.6)',
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(75, 192, 192, 0.6)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                onClick: function (evt, elements) {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        showCustomerList(riskData[idx].key, riskData[idx].label);
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        precision: 0
+                    }
+                }
+            }
+        });
+    }
+
+    function showCustomerList(riskKey, riskLabel) {
+        const customers = riskCustomers[riskKey];
+        if (!customers || customers.length === 0) {
+            $("#customer-list").html(`<b>No customers in ${riskLabel}.</b>`).show();
+            return;
+        }
+        let html = `<h4>${riskLabel} Customers</h4><ul>`;
+        customers.forEach(c => html += `<li>${c}</li>`);
+        html += '</ul>';
+        $("#customer-list").html(html).show();
     }
 </script>
